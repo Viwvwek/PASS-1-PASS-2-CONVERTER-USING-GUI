@@ -1,0 +1,6 @@
+Machine Code (Pass 2):
+LOAD 4
+ADD 5
+STORE 6
+JUMP 7
+HALT
