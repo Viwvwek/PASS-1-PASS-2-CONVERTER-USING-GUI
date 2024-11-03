@@ -1,0 +1,8 @@
+START:  LOAD    A
+        ADD     B
+        STORE   C
+        JUMP    END
+A:      DATA    5
+B:      DATA    10
+C:      DATA    0
+END:    HALT
