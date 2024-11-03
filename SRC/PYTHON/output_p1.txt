@@ -1,0 +1,6 @@
+Symbol Table (Pass 1):
+START : 0
+A     : 4
+B     : 5
+C     : 6
+END   : 7
