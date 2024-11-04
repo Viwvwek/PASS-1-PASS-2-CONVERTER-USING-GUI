@@ -13,9 +13,3 @@ The Machine Code Converter is a GUI-based application that simulates a two-pass 
 ## Requirements
 - Python 3.x
 - Tkinter (comes pre-installed with Python)
-
-## Installation
-1. **Clone the Repository**:
-   ```bash
-   git clone https://github.com/yourusername/machine-code-converter.git
-   cd machine-code-converter
