@@ -1,175 +1,214 @@
 import tkinter as tk
-from tkinter import messagebox, simpledialog
-from tkinter import ttk
-from PIL import Image, ImageTk  # Make sure you have Pillow installed
+from tkinter import messagebox
 
-class MachineCodeConverter:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Machine Code Converter")
-        self.root.geometry("500x600")
-        self.root.configure(bg="#D3D3D3")  # Light gray background to mimic Windows theme
+# SIC instruction set and OPTAB (simplified for the example)
+OPTAB = {
+    'LDA': 0x00, 'ADD': 0x18, 'SUB': 0x1C, 'STA': 0x0C, 'JSUB': 0x48, 'J': 0x3C, 'LDX': 0x04, 'MUL': 0x20
+    # Add more opcodes as needed
+}
 
-        # Initialize attributes for symbol table and machine code output
-        self.symbol_table = {}
-        self.address_counter = 0
-        self.machine_code = []
+# Example of a simple symbol table (SYMTAB)
+SYMTAB = {}
 
-        # Apply a theme
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("TLabel", background="#D3D3D3", foreground="#000000", font=("Segoe UI", 10))
-        style.configure("TButton", background="#E6E6E6", foreground="#000000", font=("Segoe UI", 10, "bold"))
-        style.map("TButton", background=[("active", "#C0C0C0")])  # Change button color on hover
-        style.configure("TEntry", background="#FFFFFF", foreground="#000000", font=("Segoe UI", 10))
+def is_valid(symbol, line_number, lines):
+    """
+    Validate symbol for Pass 1.
+    """
+    if len(symbol) > 6:
+        messagebox.showerror("Error", f"Symbol is too long at line {line_number + 1}")
+        return False
+    if not symbol.isalnum():
+        messagebox.showerror("Error", f"Symbol contains invalid characters at line {line_number + 1}")
+        return False
+    if (symbol == 'START' and line_number != 0) or (symbol != 'START' and line_number == 0):
+        messagebox.showerror("Error", f"START must be the first line (line {line_number + 1})")
+        return False
+    if (symbol == 'END' and line_number != len(lines) - 1) or (symbol != 'END' and line_number == len(lines) - 1):
+        messagebox.showerror("Error", f"END must be the last line (line {line_number + 1})")
+        return False
+    return True
 
-        # Create GUI components
-        self.create_widgets()
-        
-    def create_widgets(self):
-        # Title label
-        title_label = ttk.Label(self.root, text="Machine Code Converter", font=("Segoe UI", 16, "bold"))
-        title_label.grid(row=0, column=0, columnspan=3, padx=10, pady=10)
 
-        # Input field for assembly code
-        ttk.Label(self.root, text="Enter Assembly Code:").grid(row=1, column=0, padx=10, pady=5)
-        self.code_text = tk.Text(self.root, height=8, width=40, bg="#FFFFFF", fg="#000000", font=("Courier New", 10))
-        self.code_text.grid(row=2, column=0, columnspan=3, padx=10, pady=5)
+def pass1(lines):
+    """
+    Perform Pass 1 to generate Symbol Table (SYMTAB) and calculate Program Length.
+    """
+    starting = 0
+    locctr = 0
+    proglen = 0
+    symbol_table = {}
+    output = []
 
-        # Convert and Clear buttons
-        convert_button = ttk.Button(self.root, text="Convert", command=self.choose_pass)
-        convert_button.grid(row=3, column=0, pady=10)
-        clear_button = ttk.Button(self.root, text="Clear", command=self.clear_all)
-        clear_button.grid(row=3, column=1, pady=10)
+    lines = lines.split('\n')
+    for i, line in enumerate(lines):
+        parts = line.split()  # Decompose line (simplified version)
+        if len(parts) < 2:
+            continue  # Skip empty lines or malformed lines
 
-        # Output Symbol Table
-        ttk.Label(self.root, text="Symbol Table (Pass 1):").grid(row=4, column=0, padx=10, pady=5)
-        self.symbol_table_text = tk.Text(self.root, height=8, width=40, bg="#FFFFFF", fg="#000000", font=("Courier New", 10), state="disabled")
-        self.symbol_table_text.grid(row=5, column=0, columnspan=3, padx=10, pady=5)
+        label, opcode, *operand = parts
 
-        # Output Machine Code
-        ttk.Label(self.root, text="Machine Code (Pass 2):").grid(row=6, column=0, padx=10, pady=5)
-        self.machine_code_text = tk.Text(self.root, height=8, width=40, bg="#FFFFFF", fg="#000000", font=("Courier New", 10), state="disabled")
-        self.machine_code_text.grid(row=7, column=0, columnspan=3, padx=10, pady=5)
+        # Validate the symbol for Pass 1
+        if not is_valid(label, i, lines):
+            return None, None, None  # Early exit on invalid input
 
-    def choose_pass(self):
-        # Dialog box to choose Pass 1 or Pass 2
-        choice = simpledialog.askstring("Choose Pass", "Enter '1' for Pass 1 or '2' for Pass 2:", parent=self.root)
-        
-        if choice == "1":
-            self.run_pass1()
-        elif choice == "2":
-            self.run_pass2()
-        else:
-            messagebox.showerror("Invalid Input", "Please enter '1' or '2'.")
+        if label == 'START':
+            starting = int(operand[0], 16) if operand else 0
+            locctr = starting
+            output.append(f"START at {hex(starting)}")
+            continue
 
-    def run_pass1(self):
-        self.symbol_table.clear()
-        self.address_counter = 0
-        code_lines = self.code_text.get("1.0", "end").strip().splitlines()
+        if label == 'END':
+            proglen = locctr - starting
+            output.append(f"Program Length: {hex(proglen)}")
+            continue
 
-        self.symbol_table_text.config(state="normal")
-        self.symbol_table_text.delete("1.0", "end")
+        # Update the symbol table for labels
+        if label != 'START' and label != 'END':
+            if label in symbol_table:
+                messagebox.showerror("Error", f"Duplicate Symbol: {label} (line {i + 1})")
+                continue  # Skip duplicate symbols
+            symbol_table[label] = hex(locctr)
 
-        # Generate the symbol table by parsing labels
-        for line in code_lines:
-            line = line.strip()
-            if not line or line.startswith(";"):
-                continue  # Ignore empty lines and comments
-            
-            label, opcode, operand = self.parse_line(line)
-            
-            if label:
-                if label in self.symbol_table:
-                    messagebox.showerror("Error", f"Duplicate label '{label}' found.")
-                    return
-                self.symbol_table[label] = self.address_counter
-            
-            # Update address counter for each instruction
-            self.address_counter += 1
+        # Handle instructions and directives
+        if opcode in OPTAB:
+            locctr += 3  # Each instruction is 3 bytes
+        elif opcode == 'WORD':
+            locctr += 3  # Word takes 3 bytes
+        elif opcode == 'RESW':
+            locctr += int(operand[0]) * 3  # Reserved word takes 3 bytes per word
+        elif opcode == 'RESB':
+            locctr += int(operand[0])  # Reserved byte
+        elif opcode == 'BYTE':
+            if operand[0] == 'C':
+                locctr += len(operand[1]) - 3  # 'C' string literal length
+            elif operand[0] == 'X':
+                locctr += (len(operand[1]) - 3) // 2  # 'X' hex string length
 
-        self.display_symbol_table()
+        output.append(f"{hex(locctr)}\t{line}")
 
-    def run_pass2(self):
-        self.machine_code.clear()
-        code_lines = self.code_text.get("1.0", "end").strip().splitlines()
+    return symbol_table, proglen, output
 
-        self.machine_code_text.config(state="normal")
-        self.machine_code_text.delete("1.0", "end")
 
-        for line in code_lines:
-            line = line.strip()
-            if not line or line.startswith(";"):
-                continue  # Ignore empty lines and comments
-            
-            label, opcode, operand = self.parse_line(line)
+def pass2(lines, symbol_table, proglen):
+    """
+    Perform Pass 2 to generate object code based on the symbol table and OPTAB.
+    """
+    output = []
+    locctr = 0
+    current_line = ""
 
-            if opcode and operand:
-                # Use symbol table for label resolution
-                if operand in self.symbol_table:
-                    address = self.symbol_table[operand]
-                    machine_instruction = f"{opcode} {address}"
-                else:
-                    machine_instruction = f"{opcode} {operand}"
-                self.machine_code.append(machine_instruction)
-
-        # Display machine code in output
-        self.display_machine_code()
-
-    def parse_line(self, line):
-        """Parse a line into label, opcode, and operand."""
-        label, opcode, operand = None, None, None
+    for line in lines.split('\n'):
         parts = line.split()
-        
-        if len(parts) == 3:
-            label, opcode, operand = parts
-        elif len(parts) == 2:
-            if parts[0][-1] == ":":
-                label, opcode = parts
-                operand = ""
-            else:
-                opcode, operand = parts
-        elif len(parts) == 1:
-            opcode = parts[0]
+        if len(parts) < 2:
+            continue  # Skip empty lines or malformed lines
 
-        # Remove ":" from labels if present
-        if label and label.endswith(":"):
-            label = label[:-1]
+        label, opcode, *operand = parts
 
-        return label, opcode, operand
+        # Generate object code for instructions in Pass 2
+        if opcode in OPTAB:
+            opcode_hex = hex(OPTAB[opcode])[2:].upper().zfill(2)
+            operand_address = symbol_table.get(operand[0], '0000') if operand else '0000'
+            object_code = opcode_hex + operand_address
+            current_line += object_code
+            locctr += 3
+        elif opcode == 'WORD':
+            object_code = hex(int(operand[0]))[2:].upper().zfill(6)
+            current_line += object_code
+            locctr += 3
+        elif opcode == 'BYTE':
+            if operand[0][0] == 'C':
+                object_code = ''.join([hex(ord(ch))[2:].upper().zfill(2) for ch in operand[0][2:-1]])
+                current_line += object_code
+                locctr += len(object_code) // 2
+            elif operand[0][0] == 'X':
+                current_line += operand[0][2:-1]
+                locctr += len(operand[0][2:-1]) // 2
+        elif opcode in ['RESW', 'RESB']:
+            locctr += int(operand[0]) * 3 if opcode == 'RESW' else int(operand[0])
+            continue
+        else:
+            messagebox.showerror("Error", f"Invalid opcode: {opcode}")
+            return []
 
-    def display_symbol_table(self):
-        self.symbol_table_text.config(state="normal")
-        self.symbol_table_text.delete("1.0", "end")
-        
-        for symbol, address in self.symbol_table.items():
-            self.symbol_table_text.insert("end", f"{symbol} : {address}\n")
-        
-        self.symbol_table_text.config(state="disabled")
+        # If line length exceeds 60, write the current line and start a new one
+        if len(current_line) > 60:
+            output.append(current_line)
+            current_line = ""
 
-    def display_machine_code(self):
-        self.machine_code_text.config(state="normal")
-        self.machine_code_text.delete("1.0", "end")
-        
-        for instruction in self.machine_code:
-            self.machine_code_text.insert("end", f"{instruction}\n")
-        
-        self.machine_code_text.config(state="disabled")
+    if current_line:
+        output.append(current_line)
 
-    def clear_all(self):
-        self.code_text.delete("1.0", "end")
-        self.symbol_table_text.config(state="normal")
-        self.symbol_table_text.delete("1.0", "end")
-        self.symbol_table_text.config(state="disabled")
-        self.machine_code_text.config(state="normal")
-        self.machine_code_text.delete("1.0", "end")
-        self.machine_code_text.config(state="disabled")
-        self.symbol_table.clear()
-        self.machine_code.clear()
-        self.address_counter = 0
+    return output
 
-# Main application
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = MachineCodeConverter(root)
-    root.mainloop()
+
+# GUI setup
+def on_pass1_button_click():
+    source_code = code_input.get("1.0", tk.END).strip()
+    symbol_table, proglen, output = pass1(source_code)
+    
+    if symbol_table is None:
+        return  # If Pass1 fails, don't proceed to Pass2
+    
+    symbol_table_text.delete(1.0, tk.END)
+    symbol_table_text.insert(tk.END, "\n".join([f"{k}: {v}" for k, v in symbol_table.items()]))
+    output_text.delete(1.0, tk.END)
+    output_text.insert(tk.END, "\n".join(output))
+
+
+def on_pass2_button_click():
+    source_code = code_input.get("1.0", tk.END).strip()
+    symbol_table_text_content = symbol_table_text.get("1.0", tk.END).strip().splitlines()
+    symbol_table = {line.split(":")[0].strip(): line.split(":")[1].strip() for line in symbol_table_text_content}
+    
+    if not symbol_table:
+        messagebox.showerror("Error", "Pass 1 must be run first to generate the symbol table.")
+        return
+    
+    proglen = int(proglen_input.get(), 16) if proglen_input.get() else 0
+    output = pass2(source_code, symbol_table, proglen)
+    
+    if not output:
+        messagebox.showerror("Error", "Pass 2 failed.")
+        return
+    
+    output_text.delete(1.0, tk.END)
+    output_text.insert(tk.END, "\n".join(output))
+
+
+# Tkinter GUI
+root = tk.Tk()
+root.title("SIC Assembler")
+
+# Assembly code input area
+code_label = tk.Label(root, text="Enter Assembly Code:")
+code_label.pack()
+
+code_input = tk.Text(root, height=10, width=80)
+code_input.pack()
+
+# Buttons for running Pass 1 and Pass 2
+pass1_button = tk.Button(root, text="Run Pass 1", command=on_pass1_button_click)
+pass1_button.pack()
+
+pass2_button = tk.Button(root, text="Run Pass 2", command=on_pass2_button_click)
+pass2_button.pack()
+
+# Symbol table display
+symbol_table_label = tk.Label(root, text="Symbol Table:")
+symbol_table_label.pack()
+
+symbol_table_text = tk.Text(root, height=10, width=80)
+symbol_table_text.pack()
+
+# Program length input
+proglen_label = tk.Label(root, text="Program Length (in Hex, for Pass 2):")
+proglen_label.pack()
+
+proglen_input = tk.Entry(root)
+proglen_input.pack()
+
+# Output display
+output_label = tk.Label(root, text="Output:")
+output_label.pack()
+
+output_text = tk.Text(root, height=10, width=80
